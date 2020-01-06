@@ -89,26 +89,29 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[macro_use]
-mod gas;
+pub mod gas;
 
-mod account_db;
-mod exec;
-mod wasm;
-mod rent;
+pub mod account_db;
+pub mod exec;
+pub mod wasm;
+pub mod rent;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
 use crate::exec::ExecutionContext;
 use crate::account_db::{AccountDb, DirectAccountDb};
 use crate::wasm::{WasmLoader, WasmVm};
 
 pub use crate::gas::{Gas, GasMeter};
-pub use crate::exec::{ExecResult, ExecReturnValue, ExecError, StatusCode};
+pub use crate::exec::{StorageKey, ExecResult, ExecReturnValue, ExecError, StatusCode};
 
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 use sp_core::crypto::UncheckedFrom;
+use sp_core::H256;
+use std::collections::HashMap;
+use std::cell::RefCell;
 use sp_std::{prelude::*, marker::PhantomData, fmt::Debug};
 use codec::{Codec, Encode, Decode};
 use sp_io::hashing::blake2_256;
@@ -128,10 +131,9 @@ use frame_support::{
 use frame_support::traits::{OnFreeBalanceZero, OnUnbalanced, Currency, Get, Time, Randomness};
 use frame_system::{self as system, ensure_signed, RawOrigin, ensure_root};
 use sp_core::storage::well_known_keys::CHILD_STORAGE_KEY_PREFIX;
-
+use wabt;
 pub type CodeHash<T> = <T as frame_system::Trait>::Hash;
 pub type TrieId = Vec<u8>;
-
 /// A function that generates an `AccountId` for a contract upon instantiation.
 pub trait ContractAddressFor<CodeHash, AccountId> {
 	fn contract_address_for(code_hash: &CodeHash, data: &[u8], origin: &AccountId) -> AccountId;

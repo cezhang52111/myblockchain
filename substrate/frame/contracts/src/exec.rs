@@ -102,7 +102,7 @@ pub trait Ext {
 	///
 	/// Returns `None` if the `key` wasn't previously set by `set_storage` or
 	/// was deleted.
-	fn get_storage(&self, key: &StorageKey) -> Option<Vec<u8>>;
+	fn get_storage(&mut self, key: &StorageKey) -> Option<Vec<u8>>;
 
 	/// Sets the storage entry by the given key to the specified value. If `value` is `None` then
 	/// the storage entry is deleted. Returns an Err if the value size is too large.
@@ -214,7 +214,7 @@ pub trait Vm<T: Trait> {
 	fn execute<E: Ext<T = T>>(
 		&self,
 		exec: &Self::Executable,
-		ext: E,
+		ext: &mut E,
 		input_data: Vec<u8>,
 		gas_meter: &mut GasMeter<T>,
 	) -> ExecResult;
@@ -395,7 +395,7 @@ where
 					let output = nested.vm
 						.execute(
 							&executable,
-							nested.new_call_context(caller, value),
+							&mut nested.new_call_context(caller, value),
 							input_data,
 							gas_meter,
 						)?;
@@ -482,7 +482,7 @@ where
 			let output = nested.vm
 				.execute(
 					&executable,
-					nested.new_call_context(caller.clone(), endowment),
+					&mut nested.new_call_context(caller.clone(), endowment),
 					input_data,
 					gas_meter,
 				)?;
@@ -691,7 +691,7 @@ where
 {
 	type T = T;
 
-	fn get_storage(&self, key: &StorageKey) -> Option<Vec<u8>> {
+	fn get_storage(&mut self, key: &StorageKey) -> Option<Vec<u8>> {
 		self.ctx.overlay.get_storage(&self.ctx.self_account, self.ctx.self_trie_id.as_ref(), key)
 	}
 
@@ -920,12 +920,12 @@ mod tests {
 		fn execute<E: Ext<T = Test>>(
 			&self,
 			exec: &MockExecutable,
-			mut ext: E,
+			ext: &mut E,
 			input_data: Vec<u8>,
 			gas_meter: &mut GasMeter<Test>,
 		) -> ExecResult {
 			(exec.0)(MockCtx {
-				ext: &mut ext,
+				ext: ext,
 				input_data,
 				gas_meter,
 			})

@@ -109,7 +109,7 @@ impl<'a, T: Trait> crate::exec::Vm<T> for WasmVm<'a> {
 	fn execute<E: Ext<T = T>>(
 		&self,
 		exec: &WasmExecutable,
-		mut ext: E,
+		ext: &mut E,
 		input_data: Vec<u8>,
 		gas_meter: &mut GasMeter<E::T>,
 	) -> ExecResult {
@@ -132,7 +132,7 @@ impl<'a, T: Trait> crate::exec::Vm<T> for WasmVm<'a> {
 		});
 
 		let mut runtime = Runtime::new(
-			&mut ext,
+			ext,
 			input_data,
 			&self.schedule,
 			memory,
@@ -212,18 +212,24 @@ mod tests {
 		/// This behavior is used to prevent mixing up an access to unexpected location and empty
 		/// cell.
 		runtime_storage_keys: RefCell<HashMap<Vec<u8>, Option<Vec<u8>>>>,
+
+		write_key_value: HashMap<StorageKey, Vec<u8>>,
+		read_key_value: HashMap<StorageKey, Vec<u8>>,
 	}
 
 	impl Ext for MockExt {
 		type T = Test;
 
-		fn get_storage(&self, key: &StorageKey) -> Option<Vec<u8>> {
+		fn get_storage(&mut self, key: &StorageKey) -> Option<Vec<u8>> {
+			let v = self.storage.get(key).cloned().unwrap();
+			self.read_key_value.insert(*key, v);
 			self.storage.get(key).cloned()
 		}
 		fn set_storage(&mut self, key: StorageKey, value: Option<Vec<u8>>)
 			-> Result<(), &'static str>
 		{
-			*self.storage.entry(key).or_insert(Vec::new()) = value.unwrap_or(Vec::new());
+			*self.storage.entry(key).or_insert(Vec::new()) = value.clone().unwrap_or(Vec::new());
+			self.write_key_value.insert(key, value.unwrap());
 			Ok(())
 		}
 		fn instantiate(
@@ -336,7 +342,7 @@ mod tests {
 	impl Ext for &mut MockExt {
 		type T = <MockExt as Ext>::T;
 
-		fn get_storage(&self, key: &[u8; 32]) -> Option<Vec<u8>> {
+		fn get_storage(&mut self, key: &[u8; 32]) -> Option<Vec<u8>> {
 			(**self).get_storage(key)
 		}
 		fn set_storage(&mut self, key: [u8; 32], value: Option<Vec<u8>>)
@@ -423,7 +429,7 @@ mod tests {
 	fn execute<E: Ext>(
 		wat: &str,
 		input_data: Vec<u8>,
-		ext: E,
+		ext: &mut E,
 		gas_meter: &mut GasMeter<E::T>,
 	) -> ExecResult {
 		use crate::exec::Vm;
@@ -705,10 +711,21 @@ mod tests {
 		let output = execute(
 			CODE_GET_STORAGE,
 			vec![],
-			mock_ext,
+			&mut mock_ext,
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 
+		println!("get storage puts data into scratch" );
+		let wkv = mock_ext.write_key_value;
+		for (k, v) in &wkv {
+			println!("write k: {:?}, v: {:?}", k, v);
+		}
+
+		let rkv = mock_ext.read_key_value;
+		for (k, v) in &rkv {
+			println!("read k: {:?}, v: {:?}", k, v);
+		}
+		
 		assert_eq!(output, ExecReturnValue { status: STATUS_SUCCESS, data: [0x22; 32].to_vec() });
 	}
 
@@ -769,7 +786,7 @@ mod tests {
 		let _ = execute(
 			CODE_CALLER,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 	}
@@ -831,7 +848,7 @@ mod tests {
 		let _ = execute(
 			CODE_ADDRESS,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 	}
@@ -891,7 +908,7 @@ mod tests {
 		let _ = execute(
 			CODE_BALANCE,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut gas_meter,
 		).unwrap();
 	}
@@ -951,7 +968,7 @@ mod tests {
 		let _ = execute(
 			CODE_GAS_PRICE,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut gas_meter,
 		).unwrap();
 	}
@@ -1010,7 +1027,7 @@ mod tests {
 		let output = execute(
 			CODE_GAS_LEFT,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut gas_meter,
 		).unwrap();
 
@@ -1074,7 +1091,7 @@ mod tests {
 		let _ = execute(
 			CODE_VALUE_TRANSFERRED,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut gas_meter,
 		).unwrap();
 	}
@@ -1145,7 +1162,7 @@ mod tests {
 		let output = execute(
 			CODE_RETURN_FROM_START_FN,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 
@@ -1207,7 +1224,7 @@ mod tests {
 		let _ = execute(
 			CODE_TIMESTAMP_NOW,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut gas_meter,
 		).unwrap();
 	}
@@ -1266,7 +1283,7 @@ mod tests {
 		let _ = execute(
 			CODE_MINIMUM_BALANCE,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut gas_meter,
 		).unwrap();
 	}
@@ -1335,7 +1352,7 @@ mod tests {
 		let output = execute(
 			CODE_RANDOM,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut gas_meter,
 		).unwrap();
 
@@ -1427,7 +1444,7 @@ mod tests {
 			execute(
 				CODE_DEPOSIT_EVENT_MAX_TOPICS,
 				vec![],
-				MockExt::default(),
+				&mut MockExt::default(),
 				&mut gas_meter
 			),
 			Err(ExecError { reason: DispatchError::Other("during execution"), buffer: _ })
@@ -1469,7 +1486,7 @@ mod tests {
 			execute(
 				CODE_DEPOSIT_EVENT_DUPLICATES,
 				vec![],
-				MockExt::default(),
+				&mut MockExt::default(),
 				&mut gas_meter
 			),
 			Err(ExecError { reason: DispatchError::Other("during execution"), buffer: _ })
@@ -1533,7 +1550,7 @@ mod tests {
 		let _ = execute(
 			CODE_BLOCK_NUMBER,
 			vec![],
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 	}
@@ -1573,7 +1590,7 @@ mod tests {
 		let output = execute(
 			CODE_SIMPLE_ASSERT,
 			input_data,
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 
@@ -1589,7 +1606,7 @@ mod tests {
 		let error = execute(
 			CODE_SIMPLE_ASSERT,
 			input_data,
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).err().unwrap();
 
@@ -1643,7 +1660,7 @@ mod tests {
 		let output = execute(
 			CODE_RETURN_WITH_DATA,
 			hex!("00112233445566778899").to_vec(),
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 
@@ -1656,7 +1673,7 @@ mod tests {
 		let output = execute(
 			CODE_RETURN_WITH_DATA,
 			hex!("112233445566778899").to_vec(),
-			MockExt::default(),
+			&mut MockExt::default(),
 			&mut GasMeter::with_limit(50_000, 1),
 		).unwrap();
 
@@ -1744,7 +1761,7 @@ mod tests {
 	#[test]
 	fn get_runtime_storage() {
 		let mut gas_meter = GasMeter::with_limit(50_000, 1);
-		let mock_ext = MockExt::default();
+		let mut mock_ext = MockExt::default();
 
 		// "\01\02\03\04" - Some(0x14144020)
 		// "\02\03\04\05" - None
@@ -1758,7 +1775,7 @@ mod tests {
 		let _ = execute(
 			CODE_GET_RUNTIME_STORAGE,
 			vec![],
-			mock_ext,
+			&mut mock_ext,
 			&mut gas_meter,
 		).unwrap();
 	}

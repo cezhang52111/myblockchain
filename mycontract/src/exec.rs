@@ -48,6 +48,7 @@ pub const STATUS_SUCCESS: StatusCode = 0;
 
 /// Output of a contract call or instantiation which ran to completion.
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ExecReturnValue {
 	pub status: StatusCode,
 	pub data: Vec<u8>,
@@ -65,6 +66,7 @@ impl ExecReturnValue {
 /// precondition of a system call, etc.) or errors with the orchestration (eg. out-of-gas errors, a
 /// non-existent destination contract, etc.).
 #[cfg_attr(test, derive(sp_runtime::RuntimeDebug))]
+#[derive(Debug)]
 pub struct ExecError {
 	pub reason: DispatchError,
 	/// This is an allocated buffer that may be reused. The buffer must be cleared explicitly

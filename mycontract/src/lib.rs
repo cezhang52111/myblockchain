@@ -96,7 +96,7 @@ pub mod exec;
 pub mod wasm;
 pub mod rent;
 
-#[cfg(test)]
+//#[cfg(test)]
 pub mod tests;
 
 use crate::exec::ExecutionContext;

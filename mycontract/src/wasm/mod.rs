@@ -27,10 +27,10 @@ use codec::{Encode, Decode};
 use sp_sandbox;
 
 #[macro_use]
-mod env_def;
-mod code_cache;
-mod prepare;
-mod runtime;
+pub mod env_def;
+pub mod code_cache;
+pub mod prepare;
+pub mod runtime;
 
 use self::runtime::{to_execution_result, Runtime};
 use self::code_cache::load as load_code;
@@ -58,8 +58,8 @@ pub struct PrefabWasmModule {
 
 /// Wasm executable loaded by `WasmLoader` and executed by `WasmVm`.
 pub struct WasmExecutable {
-	entrypoint_name: &'static str,
-	prefab_module: PrefabWasmModule,
+	pub entrypoint_name: &'static str,
+	pub prefab_module: PrefabWasmModule,
 }
 
 /// Loader which fetches `WasmExecutable` from the code cache.
